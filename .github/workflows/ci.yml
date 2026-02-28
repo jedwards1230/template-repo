@@ -1,0 +1,63 @@
+name: CI
+run-name: "CI — ${{ github.event.pull_request.title || github.ref_name }}"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------
+      # TODO: Add language setup and test/lint steps for your project.
+      #
+      # Go example:
+      #   - uses: actions/setup-go@v5
+      #     with:
+      #       go-version-file: go.mod
+      #   - run: go test -v -race -coverprofile=coverage.out ./...
+      #   - run: go vet ./...
+      #   - uses: golangci/golangci-lint-action@v6
+      #
+      # Node/Bun example:
+      #   - uses: oven-sh/setup-bun@v2
+      #   - run: bun install
+      #   - run: bun run lint
+      #   - run: bun test
+      #
+      # Python example:
+      #   - uses: actions/setup-python@v5
+      #     with:
+      #       python-version: "3.12"
+      #   - run: pip install -r requirements.txt
+      #   - run: pytest
+      # ---------------------------------------------------------------
+
+      - name: Placeholder
+        run: echo "TODO — add test and lint steps"
+
+  # Gate job: single required status check for branch protection
+  ci:
+    name: CI
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.test.result }}" != "success" ]]; then
+            echo "::error::Test job failed"
+            exit 1
+          fi
+          echo "All checks passed"

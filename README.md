@@ -22,6 +22,10 @@ opinionated scaffold that works in both local devcontainers and Claude Code Web
   devcontainer.json      # VS Code devcontainer config
   entrypoint.sh          # Runs on container start (secrets, deps, git config)
   Dockerfile             # Base image with git, curl, jq, yq
+.github/workflows/
+  ci.yml                 # Test + lint on PR/push (language-agnostic stub)
+  build.yml              # Docker build + push to GHCR
+  release.yml            # Semver release (manual trigger)
 .gitignore               # Common patterns + .claude/settings.local.json
 .pre-commit-config.yaml  # trailing-whitespace, end-of-file, check-yaml, etc.
 CLAUDE.md                # Project instructions for Claude Code
@@ -50,6 +54,17 @@ body of each script with your project logic.
 | `stop.sh` | When Claude finishes responding | Run linters / tests |
 | `subagent-stop.sh` | When a subagent finishes | Aggregate results |
 | `session-end.sh` | Session terminates | Cleanup temp files |
+
+## GitHub Actions Workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci.yml` | Push to main, PRs | Test + lint with gate job for branch protection |
+| `build.yml` | Push to main, tags | Docker build + push to GHCR with metadata tags |
+| `release.yml` | Manual dispatch | Compute semver, create tag + GitHub release |
+
+The CI workflow is a language-agnostic stub with commented examples for Go,
+Node/Bun, and Python. Uncomment and customize the section you need.
 
 ## Claude Code Web
 
