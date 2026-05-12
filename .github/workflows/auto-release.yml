@@ -77,21 +77,28 @@ jobs:
           fi
 
           # push event: check PR labels for semver override, default to patch.
-          # Retry up to 3 times — GitHub API may not have the merge commit indexed
-          # immediately after the push event fires.
+          # Retry only while the PR isn't indexed yet (common after fresh
+          # merges). If the PR is found but has no labels, that's an
+          # immediate "default to patch" — no point in sleeping.
           LABELS=""
+          PR_FOUND=""
           for attempt in 1 2 3; do
-            LABELS=$(gh pr list --state merged --base main --limit 100 \
+            PR_FOUND=$(gh pr list --state merged --base main --limit 100 \
               --json labels,mergeCommit \
-              | jq -r --arg sha "$GITHUB_SHA" \
-                '.[] | select(.mergeCommit.oid == $sha) | .labels[].name' 2>/dev/null || echo "")
-            if [ -n "$LABELS" ]; then
+              | jq -c --arg sha "$GITHUB_SHA" \
+                '[.[] | select(.mergeCommit.oid == $sha)] | first // empty' \
+                2>/dev/null || echo "")
+            if [ -n "$PR_FOUND" ]; then
+              LABELS=$(echo "$PR_FOUND" | jq -r '.labels[]?.name // empty' 2>/dev/null || echo "")
               break
             fi
-            echo "Attempt ${attempt}: no labels found for ${GITHUB_SHA}, retrying in 5s..."
+            echo "Attempt ${attempt}: merged PR for ${GITHUB_SHA} not yet indexed, retrying in 5s..."
             sleep 5
           done
 
+          if [ -z "$PR_FOUND" ]; then
+            echo "::warning::No merged PR matched ${GITHUB_SHA} after 3 attempts — defaulting to patch"
+          fi
           echo "Labels for commit ${GITHUB_SHA}: ${LABELS:-<none>}"
 
           if echo "$LABELS" | grep -q 'semver:major'; then

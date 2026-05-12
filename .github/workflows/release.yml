@@ -31,6 +31,10 @@ on:
         required: false
         type: boolean
         default: false
+    secrets:
+      ANTHROPIC_API_KEY:
+        description: "Anthropic API key for AI-generated release notes. Optional — workflow falls back to GitHub's native generate_release_notes when absent."
+        required: false
   workflow_dispatch:
     inputs:
       bump_type:
