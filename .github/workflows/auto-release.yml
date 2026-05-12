@@ -1,0 +1,113 @@
+# Auto-release on push to main.
+#
+# Detects the bump type from the merged PR's semver labels (semver:major /
+# semver:minor / semver:patch, default patch) and triggers release.yml to
+# version, tag, and publish a GitHub Release via the shared
+# jedwards1230/release-workflows/.github/workflows/ai-release.yml@v0 workflow.
+#
+# Also supports manual workflow_dispatch with an optional dry_run preview that
+# computes the next version and AI release notes without tagging or publishing.
+#
+# Template note: this is the canonical scaffold for the release standard
+# documented in jedwards1230/home-orchestration .claude/rules/release-conventions.md.
+
+name: Auto Release
+
+run-name: >-
+  ${{
+    github.event_name == 'workflow_dispatch'
+      && format('Auto Release: {0}{1}',
+           inputs.dry_run && 'dry-run ' || '',
+           inputs.bump_type)
+      || format('Auto Release: {0}', github.event.head_commit.message || github.sha)
+  }}
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+      dry_run:
+        description: "Dry run — compute version and preview notes without tagging or publishing"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  detect:
+    name: Detect bump type
+    runs-on: ubuntu-latest
+    outputs:
+      bump_type: ${{ steps.bump.outputs.type }}
+      dry_run: ${{ steps.bump.outputs.dry_run }}
+    steps:
+      - name: Determine bump type
+        id: bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # workflow_dispatch: use provided inputs
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "type=${{ inputs.bump_type }}" >> $GITHUB_OUTPUT
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              echo "dry_run=true" >> $GITHUB_OUTPUT
+              echo "::notice::Dry run: previewing release with bump_type=${{ inputs.bump_type }}"
+            else
+              echo "dry_run=false" >> $GITHUB_OUTPUT
+            fi
+            exit 0
+          fi
+
+          # push event: check PR labels for semver override, default to patch.
+          # Retry up to 3 times — GitHub API may not have the merge commit indexed
+          # immediately after the push event fires.
+          LABELS=""
+          for attempt in 1 2 3; do
+            LABELS=$(gh pr list --state merged --base main --limit 100 \
+              --json labels,mergeCommit \
+              | jq -r --arg sha "$GITHUB_SHA" \
+                '.[] | select(.mergeCommit.oid == $sha) | .labels[].name' 2>/dev/null || echo "")
+            if [ -n "$LABELS" ]; then
+              break
+            fi
+            echo "Attempt ${attempt}: no labels found for ${GITHUB_SHA}, retrying in 5s..."
+            sleep 5
+          done
+
+          echo "Labels for commit ${GITHUB_SHA}: ${LABELS:-<none>}"
+
+          if echo "$LABELS" | grep -q 'semver:major'; then
+            echo "type=major" >> $GITHUB_OUTPUT
+          elif echo "$LABELS" | grep -q 'semver:minor'; then
+            echo "type=minor" >> $GITHUB_OUTPUT
+          else
+            echo "type=patch" >> $GITHUB_OUTPUT
+          fi
+          echo "dry_run=false" >> $GITHUB_OUTPUT
+
+  release:
+    name: Release
+    needs: [detect]
+    uses: ./.github/workflows/release.yml
+    with:
+      bump_type: ${{ needs.detect.outputs.bump_type }}
+      dry_run: ${{ needs.detect.outputs.dry_run == 'true' }}
+    secrets: inherit
