@@ -1,71 +1,70 @@
+# Tag and create a GitHub Release via the shared
+# jedwards1230/release-workflows/.github/workflows/ai-release.yml@v0 workflow.
+#
+# Called by auto-release.yml on push to main (bump_type detected from PR
+# semver labels), or invoked directly via workflow_dispatch for manual
+# releases / dry-run previews.
+#
+# template-repo has no Docker image or Helm chart, so create_release=true
+# instructs the shared workflow to publish the GitHub Release itself. Repos
+# cloned from this template that need to chain build/publish jobs between the
+# tag and the release should set create_release=false and create the release
+# in a downstream job using needs.prepare.outputs.release_body (base64).
+#
+# See jedwards1230/home-orchestration .claude/rules/release-conventions.md for
+# the standard this workflow implements.
+
 name: Release
-run-name: "Release — ${{ inputs.version || 'auto' }}"
+
+run-name: >-
+  Release: ${{ inputs.dry_run && 'dry-run ' || '' }}${{ inputs.bump_type }}
 
 on:
+  workflow_call:
+    inputs:
+      bump_type:
+        description: "Version bump type (patch, minor, major)"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry run — compute version and preview notes without tagging or publishing"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      ANTHROPIC_API_KEY:
+        description: "Anthropic API key for AI-generated release notes. Optional — workflow falls back to GitHub's native generate_release_notes when absent."
+        required: false
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version to release (e.g. 1.2.3). Leave empty for auto-bump."
-        required: false
-      bump:
-        description: "Bump type (ignored if version is set)"
-        required: false
-        default: patch
+      bump_type:
+        description: "Version bump type"
+        required: true
         type: choice
         options:
           - patch
           - minor
           - major
+        default: patch
+      dry_run:
+        description: "Dry run — compute version and preview notes without tagging or publishing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: read
 
 jobs:
-  release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Compute version
-        id: version
-        run: |
-          if [[ -n "${{ inputs.version }}" ]]; then
-            VERSION="${{ inputs.version }}"
-          else
-            LATEST=$(git tag -l 'v*.*.*' | sort -V | tail -n1 || echo "v0.0.0")
-            MAJOR=$(echo "$LATEST" | sed 's/v//' | cut -d. -f1)
-            MINOR=$(echo "$LATEST" | sed 's/v//' | cut -d. -f2)
-            PATCH=$(echo "$LATEST" | sed 's/v//' | cut -d. -f3)
-
-            case "${{ inputs.bump }}" in
-              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-              patch) PATCH=$((PATCH + 1)) ;;
-            esac
-            VERSION="${MAJOR}.${MINOR}.${PATCH}"
-          fi
-
-          TAG="v${VERSION}"
-          if git rev-parse "$TAG" &>/dev/null; then
-            echo "::error::Tag $TAG already exists"
-            exit 1
-          fi
-
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "### Version: $TAG" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Create tag
-        run: |
-          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
-
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "${{ steps.version.outputs.tag }}" \
-            --generate-notes \
-            --title "${{ steps.version.outputs.tag }}"
+  prepare:
+    name: Tag & Release
+    uses: jedwards1230/release-workflows/.github/workflows/ai-release.yml@v0
+    with:
+      service_name: template-repo
+      service_description: "a starter scaffold for new Claude Code-friendly repos"
+      bump_type: ${{ inputs.bump_type }}
+      dry_run: ${{ inputs.dry_run }}
+      create_release: true
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
