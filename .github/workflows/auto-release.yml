@@ -8,8 +8,8 @@
 # Also supports manual workflow_dispatch with an optional dry_run preview that
 # computes the next version and AI release notes without tagging or publishing.
 #
-# Template note: this is the canonical scaffold for the release standard
-# documented in jedwards1230/home-orchestration .claude/rules/release-conventions.md.
+# Template note: releases are OPT-IN via a semver:* label on the merged PR.
+# See jedwards1230/release-workflows for documentation.
 
 name: Auto Release
 

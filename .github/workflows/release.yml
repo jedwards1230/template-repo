@@ -11,8 +11,9 @@
 # tag and the release should set create_release=false and create the release
 # in a downstream job using needs.prepare.outputs.release_body (base64).
 #
-# See jedwards1230/home-orchestration .claude/rules/release-conventions.md for
-# the standard this workflow implements.
+# Template note: calls jedwards1230/release-workflows/.github/workflows/ai-release.yml@v0.
+# See that repo for docs. Copiers may fork release-workflows and update the
+# uses: path to their own fork.
 
 name: Release
 
