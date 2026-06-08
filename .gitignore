@@ -53,3 +53,13 @@ venv/
 *.tmp
 *.bak
 tmp/
+
+# AI-assisted bootstrapping scaffolding artifacts (local-only)
+ansible-*
+libro-*
+*-payload.json
+*-tree.json
+*-commit.json
+*-body.json
+ref-update.json
+tree-update.json
