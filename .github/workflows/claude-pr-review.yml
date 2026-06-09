@@ -1,0 +1,24 @@
+# Claude PR review — calls the shared reusable workflow in
+# jedwards1230/release-workflows, which runs claude-code-action@v1 in Haiku
+# PR-review mode with the public jedwards1230-plugins marketplace + review-team
+# plugin enabled by default. The focus below is appended to the base prompt.
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+jobs:
+  review:
+    uses: jedwards1230/release-workflows/.github/workflows/claude-pr-review.yml@v1
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    with:
+      focus: |
+        template-repo is a starter scaffold other repos are cloned from, so
+        review for patterns that would propagate badly:
+        - Insecure defaults, missing permissions scoping in shipped workflows,
+          unpinned/outdated action versions.
+        - Correctness of any scaffolded scripts, Dockerfile, or config.
+        Keep it exemplary — flag anything a copier would inherit as a mistake.
+        Do NOT re-flag formatting/lint that CI owns.
