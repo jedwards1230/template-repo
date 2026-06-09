@@ -1,5 +1,5 @@
 # Tag and create a GitHub Release via the shared
-# jedwards1230/release-workflows/.github/workflows/ai-release.yml@v0 workflow.
+# jedwards1230/release-workflows/.github/workflows/ai-release.yml@v1 workflow.
 #
 # Called by auto-release.yml on push to main (bump_type detected from PR
 # semver labels), or invoked directly via workflow_dispatch for manual
@@ -11,7 +11,7 @@
 # tag and the release should set create_release=false and create the release
 # in a downstream job using needs.prepare.outputs.release_body (base64).
 #
-# Template note: calls jedwards1230/release-workflows/.github/workflows/ai-release.yml@v0.
+# Template note: calls jedwards1230/release-workflows/.github/workflows/ai-release.yml@v1.
 # See that repo for docs. Copiers may fork release-workflows and update the
 # uses: path to their own fork.
 
@@ -60,7 +60,7 @@ permissions:
 jobs:
   prepare:
     name: Tag & Release
-    uses: jedwards1230/release-workflows/.github/workflows/ai-release.yml@v0
+    uses: jedwards1230/release-workflows/.github/workflows/ai-release.yml@v1
     with:
       service_name: template-repo
       service_description: "a starter scaffold for new Claude Code-friendly repos"
