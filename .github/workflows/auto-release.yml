@@ -3,7 +3,7 @@
 # Detects the bump type from the merged PR's semver labels (semver:major /
 # semver:minor / semver:patch, default patch) and triggers release.yml to
 # version, tag, and publish a GitHub Release via the shared
-# jedwards1230/release-workflows/.github/workflows/ai-release.yml@v0 workflow.
+# jedwards1230/release-workflows/.github/workflows/ai-release.yml@v1 workflow.
 #
 # Also supports manual workflow_dispatch with an optional dry_run preview that
 # computes the next version and AI release notes without tagging or publishing.
