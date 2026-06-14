@@ -21,7 +21,7 @@ opinionated scaffold that works in both local devcontainers and Claude Code Web
 .devcontainer/
   devcontainer.json      # VS Code devcontainer config
   entrypoint.sh          # Runs on container start (secrets, deps, git config)
-  Dockerfile             # Base image with git, curl, jq, yq
+  Dockerfile             # Base image with git, curl, jq, yq, ca-certificates
 .github/workflows/
   ci.yml                 # Test + lint on PR/push (language-agnostic stub)
   build.yml              # Docker build + push to GHCR
@@ -39,7 +39,7 @@ README.md                # This file
 3. Edit `.devcontainer/Dockerfile` to add your language toolchain
 4. Edit `.devcontainer/entrypoint.sh` to install dependencies and fetch secrets
 5. Edit `.claude/hooks/session-start.sh` to install tools in Claude Code Web
-6. Run `pre-commit install` to enable git hooks
+6. Install pre-commit (`pip install pre-commit`) then run `pre-commit install` to enable git hooks
 
 ## Hook Overview
 
@@ -61,10 +61,21 @@ body of each script with your project logic.
 |----------|---------|---------|
 | `ci.yml` | Push to main, PRs | Test + lint with gate job for branch protection |
 | `build.yml` | Push to main, tags | Docker build + push to GHCR with metadata tags |
-| `release.yml` | Manual dispatch | Compute semver, create tag + GitHub release |
+| `auto-release.yml` | Push to main | Reads `semver:*` label from merged PR, calls `release.yml` |
+| `release.yml` | Called by `auto-release.yml` or `workflow_dispatch` | Compute semver, create tag + GitHub release |
+| `claude-pr-review.yml` | PRs (opened, sync, ready, reopened) | AI code review via Claude |
 
 The CI workflow is a language-agnostic stub with commented examples for Go,
 Node/Bun, and Python. Uncomment and customize the section you need.
+
+## Releases
+
+Releases are opt-in via PR labels. Label a pull request `semver:patch`,
+`semver:minor`, or `semver:major` before merging. When the PR merges to
+`main`, `auto-release.yml` reads the label and triggers a versioned release.
+A merge with no `semver:*` label defaults to a patch bump, so an unlabeled
+merge may still produce a release — add a `skip-release` label (or simply
+don't merge) to avoid one.
 
 ## Claude Code Web
 
