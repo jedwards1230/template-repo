@@ -17,7 +17,7 @@ opinionated scaffold that works in both local devcontainers and Claude Code Web
     subagent-stop.sh     # Runs when a subagent finishes
     session-end.sh       # Runs on session end (cleanup)
   rules/
-    DOCUMENTATION.md     # Placeholder: document project conventions here
+    # add domain-specific rule files here (DATABASE.md, API.md, etc.)
 .devcontainer/
   devcontainer.json      # VS Code devcontainer config
   entrypoint.sh          # Runs on container start (secrets, deps, git config)
@@ -29,6 +29,7 @@ opinionated scaffold that works in both local devcontainers and Claude Code Web
 .gitignore               # Common patterns + .claude/settings.local.json
 .pre-commit-config.yaml  # trailing-whitespace, end-of-file, check-yaml, etc.
 CLAUDE.md                # Project instructions for Claude Code
+CONTRIBUTING.md          # Build, test, lint, PR, and release process
 README.md                # This file
 ```
 
@@ -76,6 +77,10 @@ Releases are opt-in via PR labels. Label a pull request `semver:patch`,
 A merge with no `semver:*` label defaults to a patch bump, so an unlabeled
 merge may still produce a release — add a `skip-release` label (or simply
 don't merge) to avoid one.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, lint, PR, and release instructions.
 
 ## Claude Code Web
 
