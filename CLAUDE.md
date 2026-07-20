@@ -1,38 +1,48 @@
-# Project Name
+# CLAUDE.md
 
 @CONTRIBUTING.md
 
-TODO: Replace this file with project-specific instructions for Claude Code.
+Guidance for Claude Code when working in this repository.
 
-## Overview
+## What this is
 
-TODO: Describe what this project does and its primary purpose.
+<TODO(template): one-paragraph purpose — what this project is, who consumes
+it, and the one architectural choice that most shapes the codebase.>
 
-## Architecture
+Full product requirements + design: [`docs/PRD.md`](docs/PRD.md). Read it
+before structural changes. [`docs/TESTING.md`](docs/TESTING.md) holds the test
+strategy; add further design docs under `docs/` as the project grows.
 
-TODO: Describe the high-level architecture.
+## Architecture invariants (violations are bugs)
 
-- Key components and their responsibilities
-- How data flows through the system
-- External dependencies and integrations
+1. **Example — state it as a rule, not a description.** "The CLI never writes
+   to storage directly; all writes go through the `store` package" is an
+   invariant. "The CLI has a store package" is not — it doesn't say what
+   breaks if violated.
+2. <TODO(template): a second invariant specific to this project, or delete
+   this line if one example doesn't yet have a pair.>
 
-## Environment Variables
+## Design discipline
 
-TODO: Document required environment variables.
+- **Opinions are config.** Before hardcoding a behavior, ask: config default,
+  plugin, or genuinely core? A value a user might reasonably change becomes a
+  default, never a literal.
+- <TODO(template): project-specific discipline rules, if any.>
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `EXAMPLE_API_KEY` | Yes | API key for the example service |
-| `EXAMPLE_DEBUG` | No | Enable debug logging (default: false) |
+## Commands
+
+```bash
+<TODO(template): the CI gate command(s), exactly as CI runs them — e.g.
+`go build ./... && go vet ./... && go test ./...`>
+```
+
+## Layout
+
+| Path | Purpose |
+|------|---------|
+| <TODO(template): e.g. `cmd/`> | <TODO(template): one-line responsibility; point at a package doc for detail rather than repeating it here> |
 
 ## Hooks
 
-Hooks are in `.claude/hooks/` — see the Hook Overview section in `README.md` for the full table and output rules.
-
-## .claude/rules/
-
-Add domain-specific rule files in this directory when your project has conventions to document. Keep each file concise — the right detail at the right altitude, not exhaustive prose. Examples:
-
-- `DATABASE.md` — connection pattern, migration procedure, naming conventions
-- `API.md` — endpoint contracts, auth patterns, error formats
-- `DEPLOYMENT.md` — environment-specific configuration and deployment procedures
+Hooks are in `.claude/hooks/` — see the Hook Overview section in `README.md`
+for the full table and output rules.

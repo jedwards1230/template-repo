@@ -45,19 +45,43 @@ jobs:
       # ---------------------------------------------------------------
 
       - name: Placeholder
-        run: echo "TODO — add test and lint steps"
+        run: echo "TODO(template) — add test and lint steps"
+
+  # Fails only in repos generated FROM this template (never in the template
+  # itself) if any `TODO(template)` placeholder markers are still tracked —
+  # see CONTRIBUTING.md, CLAUDE.md, docs/PRD.md, docs/TESTING.md.
+  template-placeholders:
+    name: Template placeholders
+    if: github.repository != 'jedwards1230/template-repo'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Check for unresolved template placeholders
+        run: |
+          # Excludes this workflow file, which references the marker literally
+          # in order to define this check.
+          if git grep -nF 'TODO(template)' -- . ':(exclude).github/workflows/ci.yml'; then
+            echo "::error::Unresolved template placeholders (TODO(template)) found above — customize these before merging."
+            exit 1
+          fi
+          echo "No unresolved template placeholders found."
 
   # Gate job: single required status check for branch protection
   ci:
     name: CI
     if: always()
-    needs: [test]
+    needs: [test, template-placeholders]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
           if [[ "${{ needs.test.result }}" != "success" ]]; then
             echo "::error::Test job failed"
+            exit 1
+          fi
+          if [[ "${{ needs.template-placeholders.result }}" != "success" && "${{ needs.template-placeholders.result }}" != "skipped" ]]; then
+            echo "::error::Template placeholder check failed"
             exit 1
           fi
           echo "All checks passed"
