@@ -46,8 +46,3 @@ strategy; add further design docs under `docs/` as the project grows.
 
 Hooks are in `.claude/hooks/` — see the Hook Overview section in `README.md`
 for the full table and output rules.
-
-## .claude/rules/
-
-Domain-scoped rule files (`DATABASE.md`, `API.md`, ...) — see
-[`.claude/rules/README.md`](.claude/rules/README.md) for what goes there.

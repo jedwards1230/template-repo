@@ -16,8 +16,6 @@ opinionated scaffold that works in both local devcontainers and Claude Code Web
     stop.sh              # Runs when Claude finishes a response (lint/test)
     subagent-stop.sh     # Runs when a subagent finishes
     session-end.sh       # Runs on session end (cleanup)
-  rules/
-    README.md           # What goes here (currently empty — add DATABASE.md, API.md, etc. as needed)
 .devcontainer/
   devcontainer.json      # VS Code devcontainer config
   entrypoint.sh          # Runs on container start (secrets, deps, git config)

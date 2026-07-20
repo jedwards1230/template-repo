@@ -36,12 +36,6 @@ Keep documentation current as part of the change, not as a follow-up — update
 the README, [`docs/PRD.md`](docs/PRD.md)/[`docs/TESTING.md`](docs/TESTING.md),
 and any affected package docs in the same PR.
 
-Add domain-specific rule files under `.claude/rules/` (for example,
-`DATABASE.md` or `API.md`) when your project has meaningful conventions to
-capture: architecture decisions, environment-specific configuration, naming
-conventions, and setup procedures. See
-[`.claude/rules/README.md`](.claude/rules/README.md).
-
 ## Before you open a PR
 
 - Make sure all CI checks pass locally first — run the formatter, linter, and tests.
