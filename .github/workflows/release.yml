@@ -60,7 +60,7 @@ permissions:
 jobs:
   prepare:
     name: Tag & Release
-    uses: jedwards1230/release-workflows/.github/workflows/ai-release.yml@v1
+    uses: jedwards1230/release-workflows/.github/workflows/ai-release.yml@0c57d2b2c7cb044adaa1f3a070192677ab1f3bfd # v1
     with:
       service_name: template-repo
       service_description: "a starter scaffold for new Claude Code-friendly repos"
