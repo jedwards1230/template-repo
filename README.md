@@ -20,10 +20,14 @@ opinionated scaffold that works in both local devcontainers and Claude Code Web
   devcontainer.json      # VS Code devcontainer config
   entrypoint.sh          # Runs on container start (secrets, deps, git config)
   Dockerfile             # Base image with git, curl, jq, yq, ca-certificates
-.github/workflows/
-  ci.yml                 # Test + lint (language-agnostic stub) + template-placeholders gate
-  build.yml              # Docker build + push to GHCR
-  release.yml            # Semver release (manual trigger)
+.github/
+  dependabot.yml         # Weekly grouped updates for GitHub Actions + the devcontainer image
+  workflows/
+    ci.yml               # Test + lint (language-agnostic stub) + template-placeholders gate
+    build.yml            # Docker build + push to GHCR
+    auto-release.yml     # Release on merge to main, bump picked from semver:* labels
+    release.yml          # Tag + GitHub release (called by auto-release.yml, or manual)
+    claude-pr-review.yml # AI code review on PRs
 docs/
   PRD.md                 # Purpose, users, requirements, non-goals, open questions
   TESTING.md             # Test-layer table + anti-patterns to avoid
@@ -65,7 +69,7 @@ body of each script with your project logic.
 |----------|---------|---------|
 | `ci.yml` | Push to main, PRs | Test + lint stub, placeholder gate, and gate job for branch protection |
 | `build.yml` | Push to main, tags | Docker build + push to GHCR with metadata tags |
-| `auto-release.yml` | Push to main | Reads `semver:*` label from merged PR, calls `release.yml` |
+| `auto-release.yml` | Push to main, `workflow_dispatch` | Reads the merged PR's `semver:*` label, calls `release.yml`; skips `semver:none`, a generated repo's first commit, and pushes to the template repo |
 | `release.yml` | Called by `auto-release.yml` or `workflow_dispatch` | Compute semver, create tag + GitHub release |
 | `claude-pr-review.yml` | PRs (opened, sync, ready, reopened) | AI code review via Claude |
 
@@ -88,12 +92,27 @@ catching it.
 
 ## Releases
 
-Releases are opt-in via PR labels. Label a pull request `semver:patch`,
-`semver:minor`, or `semver:major` before merging. When the PR merges to
-`main`, `auto-release.yml` reads the label and triggers a versioned release.
-A merge with no `semver:*` label defaults to a patch bump, so an unlabeled
-merge may still produce a release — add a `skip-release` label (or simply
-don't merge) to avoid one.
+Every merge to `main` releases unless told not to. `auto-release.yml` reads
+the merged PR's label: `semver:major`, `semver:minor`, or `semver:patch` picks
+the bump, `semver:none` skips the release, and no `semver:*` label means a
+patch release. A push with no matching merged PR also releases as patch, with
+a warning (unless its parent commits can't be read either; then it skips, also
+with a warning).
+
+Two kinds of push do not release: the first commit of a repo generated from
+this template, and any push to the template repo itself. (The edge cases are
+spelled out in the header of `auto-release.yml`.) To cut a release by
+hand (including in the template repo), run `auto-release.yml` via
+`workflow_dispatch`; its `dry_run` option previews the version and notes
+without tagging.
+
+A generated repo gets the template's files, not its labels: it starts with
+GitHub's default label set, so create the `semver:*` labels once after
+generating it:
+
+```bash
+for l in major:B60205 minor:FBCA04 patch:0E8A16 none:C2E0C6; do gh label create "semver:${l%%:*}" --color "${l#*:}" --force; done
+```
 
 ## Contributing
 

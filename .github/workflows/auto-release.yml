@@ -1,14 +1,30 @@
 # Auto-release on push to main.
-#
-# Detects the bump type from the merged PR's semver labels (semver:major /
-# semver:minor / semver:patch, default patch) and triggers release.yml to
-# version, tag, and publish a GitHub Release via the shared
+# Decides whether to release, and the bump type, in this order:
+#   1. workflow_dispatch always releases with the chosen bump_type, including
+#      in the template repo itself. dry_run previews the next version and AI
+#      release notes without tagging or publishing.
+#   2. A push to jedwards1230/template-repo itself never releases. Nothing
+#      consumes the template's tags ("Use this template" copies the default
+#      branch, not a tag); cut one deliberately with workflow_dispatch.
+#   3. A push that created the branch (`created`, or an all-zero `before`
+#      SHA) never releases: nothing was merged. This covers the first push of
+#      a repo generated from this template.
+#   4. A root commit (no parents) never releases, whatever the push payload
+#      says. A generated repo starts with a single parentless commit. If the
+#      commit lookup still fails after 3 attempts, the run warns and carries
+#      on with the merged-PR lookup (rules 5-6).
+#   5. The merged PR's labels decide: the first exact match of semver:major,
+#      semver:minor, semver:patch, semver:none (in that order) wins.
+#      semver:none skips the release; no semver:* label releases as patch.
+#   6. No merged PR found for the commit (a direct push, or the PR is still
+#      not indexed after 3 attempts): patch release, with a ::warning::.
+#      Exception: if rule 4 could not read the parent count either, the
+#      commit may be a generated repo's initial commit, so the run skips
+#      with a ::warning:: instead. Re-run the job once the API recovers, or
+#      run workflow_dispatch to release anyway.
+# When a release is due, it calls release.yml, which tags and publishes a
+# GitHub Release via the shared
 # jedwards1230/release-workflows/.github/workflows/ai-release.yml@v1 workflow.
-#
-# Also supports manual workflow_dispatch with an optional dry_run preview that
-# computes the next version and AI release notes without tagging or publishing.
-#
-# Template note: releases are OPT-IN via a semver:* label on the merged PR.
 # See jedwards1230/release-workflows for documentation.
 
 name: Auto Release
@@ -55,6 +71,7 @@ jobs:
     name: Detect bump type
     runs-on: ubuntu-latest
     outputs:
+      release: ${{ steps.bump.outputs.release }}
       bump_type: ${{ steps.bump.outputs.type }}
       dry_run: ${{ steps.bump.outputs.dry_run }}
     steps:
@@ -63,56 +80,134 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_BUMP_TYPE: ${{ inputs.bump_type }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          PUSH_CREATED: ${{ github.event.created }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
-          # workflow_dispatch: use provided inputs
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "type=${{ inputs.bump_type }}" >> $GITHUB_OUTPUT
-            if [ "${{ inputs.dry_run }}" = "true" ]; then
-              echo "dry_run=true" >> $GITHUB_OUTPUT
-              echo "::notice::Dry run: previewing release with bump_type=${{ inputs.bump_type }}"
+          set -euo pipefail
+
+          # Rule 1: workflow_dispatch uses the provided inputs and always
+          # releases, in the template repo too.
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            {
+              echo "release=true"
+              echo "type=${INPUT_BUMP_TYPE}"
+            } >> "$GITHUB_OUTPUT"
+            if [ "${INPUT_DRY_RUN}" = "true" ]; then
+              echo "dry_run=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::Dry run: previewing release with bump_type=${INPUT_BUMP_TYPE}"
             else
-              echo "dry_run=false" >> $GITHUB_OUTPUT
+              echo "dry_run=false" >> "$GITHUB_OUTPUT"
             fi
             exit 0
           fi
+          echo "dry_run=false" >> "$GITHUB_OUTPUT"
 
-          # push event: check PR labels for semver override, default to patch.
-          # Retry only while the PR isn't indexed yet (common after fresh
-          # merges). If the PR is found but has no labels, that's an
-          # immediate "default to patch" — no point in sleeping.
+          # Every push decision below ends in one of these two.
+          no_release() {
+            echo "::notice::$1"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          release_as() {
+            {
+              echo "release=true"
+              echo "type=$1"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          # Rule 2: the template repo itself does not release on push.
+          if [ "${GH_REPO}" = "jedwards1230/template-repo" ]; then
+            no_release "The template repo does not release on push; run this workflow via workflow_dispatch to cut a release deliberately"
+          fi
+
+          # Rule 3: a push that created the branch merged nothing.
+          if [ "${PUSH_CREATED}" = "true" ] || [[ "${PUSH_BEFORE}" =~ ^0+$ ]]; then
+            no_release "This push created the branch (e.g. a generated repo's first push); nothing was merged, skipping the release"
+          fi
+
+          # Rule 4: a root commit merged nothing, whatever the payload says.
+          # Up to 3 attempts. If it still fails, warn and fall through:
+          # a merged PR still decides, and rule 6 handles the no-PR case.
+          # `arrays` keeps a missing parents field from reading as 0.
+          PARENTS=""
+          PARENTS_KNOWN=false
+          for attempt in 1 2 3; do
+            PARENTS=$(gh api "repos/${GH_REPO}/commits/${GITHUB_SHA}" --jq '.parents | arrays | length') || PARENTS=""
+            if [[ "${PARENTS}" =~ ^[0-9]+$ ]]; then
+              PARENTS_KNOWN=true
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Attempt ${attempt}: could not read the parent count of ${GITHUB_SHA}, retrying in 5s..."
+              sleep 5
+            fi
+          done
+          if [ "${PARENTS_KNOWN}" = true ]; then
+            if [ "${PARENTS}" -eq 0 ]; then
+              no_release "${GITHUB_SHA} is a root commit (e.g. a generated repo's initial commit); nothing was merged, skipping the release"
+            fi
+          else
+            echo "::warning::Could not read the parent count of ${GITHUB_SHA} after 3 attempts (got '${PARENTS}'); continuing with the merged-PR lookup"
+          fi
+
+          # Rules 5-6: read the merged PR's labels. Retry only while the PR
+          # isn't indexed yet (common after fresh merges). If the PR is found
+          # but has no labels, that's an immediate patch; no point sleeping.
           LABELS=""
           PR_FOUND=""
           for attempt in 1 2 3; do
             PR_FOUND=$(gh pr list --state merged --base main --limit 100 \
-              --json labels,mergeCommit \
+              --json number,labels,mergeCommit \
               | jq -c --arg sha "$GITHUB_SHA" \
                 '[.[] | select(.mergeCommit.oid == $sha)] | first // empty' \
                 2>/dev/null || echo "")
             if [ -n "$PR_FOUND" ]; then
-              LABELS=$(echo "$PR_FOUND" | jq -r '.labels[]?.name // empty' 2>/dev/null || echo "")
+              LABELS=$(jq -r '.labels[]?.name // empty' <<< "$PR_FOUND" 2>/dev/null || echo "")
               break
             fi
             echo "Attempt ${attempt}: merged PR for ${GITHUB_SHA} not yet indexed, retrying in 5s..."
             sleep 5
           done
 
+          # Rule 6: no PR means no labels to read; never a silent skip.
           if [ -z "$PR_FOUND" ]; then
-            echo "::warning::No merged PR matched ${GITHUB_SHA} after 3 attempts — defaulting to patch"
+            # Parent count unknown too: this may be a generated repo's initial
+            # commit. A missed release can be cut by hand; a wrong one can't
+            # be taken back, so skip, loudly.
+            if [ "${PARENTS_KNOWN}" != true ]; then
+              echo "::warning::No merged PR matched ${GITHUB_SHA} and its parent count is unknown, so it may be a generated repo's initial commit; skipping the release (re-run this job once the API recovers, or run workflow_dispatch to release anyway)"
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::warning::No merged PR matched ${GITHUB_SHA} after 3 attempts; cannot read semver labels, defaulting to a patch release"
+            release_as patch
           fi
-          echo "Labels for commit ${GITHUB_SHA}: ${LABELS:-<none>}"
 
-          if echo "$LABELS" | grep -q 'semver:major'; then
-            echo "type=major" >> $GITHUB_OUTPUT
-          elif echo "$LABELS" | grep -q 'semver:minor'; then
-            echo "type=minor" >> $GITHUB_OUTPUT
-          else
-            echo "type=patch" >> $GITHUB_OUTPUT
-          fi
-          echo "dry_run=false" >> $GITHUB_OUTPUT
+          PR=$(jq -r '.number' <<< "$PR_FOUND")
+          # One line: a label printed at line start could act as a workflow command.
+          echo "PR #${PR} labels: $(paste -sd, - <<< "${LABELS:-<none>}")"
+
+          # Rule 5: the first exact semver:* match wins, in this order.
+          for t in major minor patch none; do
+            if grep -qxF "semver:${t}" <<< "$LABELS"; then
+              if [ "$t" = none ]; then
+                no_release "PR #${PR} is labelled semver:none; skipping the release"
+              fi
+              echo "::notice::PR #${PR} is labelled semver:${t}; releasing as ${t}"
+              release_as "$t"
+            fi
+          done
+          echo "::notice::PR #${PR} has no semver:* label; releasing as patch"
+          release_as patch
 
   release:
     name: Release
     needs: [detect]
+    if: needs.detect.outputs.release == 'true'
     uses: ./.github/workflows/release.yml
     with:
       bump_type: ${{ needs.detect.outputs.bump_type }}
