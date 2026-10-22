@@ -11,13 +11,17 @@
 #      a repo generated from this template.
 #   4. A root commit (no parents) never releases, whatever the push payload
 #      says. A generated repo starts with a single parentless commit. If the
-#      commit lookup fails, the run warns and carries on with the
-#      merged-PR lookup (rules 5-6).
+#      commit lookup still fails after 3 attempts, the run warns and carries
+#      on with the merged-PR lookup (rules 5-6).
 #   5. The merged PR's labels decide: the first exact match of semver:major,
 #      semver:minor, semver:patch, semver:none (in that order) wins.
 #      semver:none skips the release; no semver:* label releases as patch.
 #   6. No merged PR found for the commit (a direct push, or the PR is still
 #      not indexed after 3 attempts): patch release, with a ::warning::.
+#      Exception: if rule 4 could not read the parent count either, the
+#      commit may be a generated repo's initial commit, so the run skips
+#      with a ::warning:: instead. Re-run the job once the API recovers, or
+#      run workflow_dispatch to release anyway.
 # When a release is due, it calls release.yml, which tags and publishes a
 # GitHub Release via the shared
 # jedwards1230/release-workflows/.github/workflows/ai-release.yml@v1 workflow.
@@ -126,16 +130,28 @@ jobs:
           fi
 
           # Rule 4: a root commit merged nothing, whatever the payload says.
-          # A failed lookup must not turn into a silent skip of a real merge,
-          # so warn and fall through to the PR lookup instead. `arrays` keeps
-          # a missing parents field from reading as 0.
-          PARENTS=$(gh api "repos/${GH_REPO}/commits/${GITHUB_SHA}" --jq '.parents | arrays | length') || PARENTS=""
-          if [[ "${PARENTS}" =~ ^[0-9]+$ ]]; then
+          # Up to 3 attempts. If it still fails, warn and fall through:
+          # a merged PR still decides, and rule 6 handles the no-PR case.
+          # `arrays` keeps a missing parents field from reading as 0.
+          PARENTS=""
+          PARENTS_KNOWN=false
+          for attempt in 1 2 3; do
+            PARENTS=$(gh api "repos/${GH_REPO}/commits/${GITHUB_SHA}" --jq '.parents | arrays | length') || PARENTS=""
+            if [[ "${PARENTS}" =~ ^[0-9]+$ ]]; then
+              PARENTS_KNOWN=true
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Attempt ${attempt}: could not read the parent count of ${GITHUB_SHA}, retrying in 5s..."
+              sleep 5
+            fi
+          done
+          if [ "${PARENTS_KNOWN}" = true ]; then
             if [ "${PARENTS}" -eq 0 ]; then
               no_release "${GITHUB_SHA} is a root commit (e.g. a generated repo's initial commit); nothing was merged, skipping the release"
             fi
           else
-            echo "::warning::Could not read the parent count of ${GITHUB_SHA} (got '${PARENTS}'); continuing with the merged-PR lookup"
+            echo "::warning::Could not read the parent count of ${GITHUB_SHA} after 3 attempts (got '${PARENTS}'); continuing with the merged-PR lookup"
           fi
 
           # Rules 5-6: read the merged PR's labels. Retry only while the PR
@@ -159,6 +175,14 @@ jobs:
 
           # Rule 6: no PR means no labels to read; never a silent skip.
           if [ -z "$PR_FOUND" ]; then
+            # Parent count unknown too: this may be a generated repo's initial
+            # commit. A missed release can be cut by hand; a wrong one can't
+            # be taken back, so skip, loudly.
+            if [ "${PARENTS_KNOWN}" != true ]; then
+              echo "::warning::No merged PR matched ${GITHUB_SHA} and its parent count is unknown, so it may be a generated repo's initial commit; skipping the release (re-run this job once the API recovers, or run workflow_dispatch to release anyway)"
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo "::warning::No merged PR matched ${GITHUB_SHA} after 3 attempts; cannot read semver labels, defaulting to a patch release"
             release_as patch
           fi

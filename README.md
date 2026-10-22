@@ -96,7 +96,8 @@ Every merge to `main` releases unless told not to. `auto-release.yml` reads
 the merged PR's label: `semver:major`, `semver:minor`, or `semver:patch` picks
 the bump, `semver:none` skips the release, and no `semver:*` label means a
 patch release. A push with no matching merged PR also releases as patch, with
-a warning.
+a warning (unless its parent commits can't be read either; then it skips, also
+with a warning).
 
 Two kinds of push do not release: the first commit of a repo generated from
 this template, and any push to the template repo itself. (The edge cases are
